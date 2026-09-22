@@ -15,11 +15,15 @@
   .field input, .field textarea { border:1px solid #d2d2d7; border-radius:8px; padding:9px 11px; font-size:13px; color:#1d1d1f; outline:none; width:100%; }
   .hint { font-size:11px; color:#aeaeb2; line-height:1.5; }
   .row2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
-  .tabbtn { flex:1; border:none; border-radius:8px; padding:9px 6px; font-size:12px; font-weight:600; cursor:pointer; line-height:1.3; background:transparent; color:#6e6e73; }
+  .tabs3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-top:20px; background:#f0f0f2; padding:4px; border-radius:10px; }
+  .tabbtn { border:none; border-radius:8px; padding:9px 6px; font-size:12px; font-weight:600; cursor:pointer; line-height:1.3; background:transparent; color:#6e6e73; }
   .tabbtn.active-first { background:#ffffff; color:#1d1d1f; box-shadow:0 1px 3px rgba(0,0,0,0.12); }
+  .tabbtn.active-routine { background:#ffffff; color:#0071e3; box-shadow:0 1px 3px rgba(0,0,0,0.12); }
   .tabbtn.active-final { background:#ffffff; color:#d70015; box-shadow:0 1px 3px rgba(0,0,0,0.12); }
   #finalOnly { display:none; }
   #finalOnly.show { display:flex; }
+  #effectiveHint { display:none; }
+  #effectiveHint.show { display:block; }
 </style>
 </head>
 <body>
@@ -31,9 +35,10 @@
     <div style="font-size:18px; font-weight:700; letter-spacing:-0.2px;">催款信產生器</div>
     <div style="font-size:12px; line-height:1.6; color:#86868b; margin-top:6px;">填入下方欄位，右側即時預覽，完成後按「複製信件」貼到 Gmail。此檔案可離線使用（下載後直接雙擊開啟即可）。</div>
 
-    <div style="display:flex; gap:8px; margin-top:20px; background:#f0f0f2; padding:4px; border-radius:10px;">
-      <button type="button" id="tabFirst" class="tabbtn">第一次通知（1 個月）</button>
-      <button type="button" id="tabFinal" class="tabbtn">最終通知（2 個月）</button>
+    <div class="tabs3">
+      <button type="button" id="tabRoutine" class="tabbtn">常態催款</button>
+      <button type="button" id="tabFirst" class="tabbtn">一個月催款</button>
+      <button type="button" id="tabFinal" class="tabbtn">兩個月催款</button>
     </div>
 
     <div style="margin-top:20px; display:flex; flex-direction:column; gap:8px; padding:14px; background:#f5f5f7; border-radius:10px;">
@@ -55,16 +60,16 @@
         <div class="field" style="margin-bottom:0;"><span class="lbl">應付金額 (元)</span><input id="amount" type="text" placeholder="46"></div>
       </div>
       <div class="hint" style="background:#f5f5f7; border-radius:8px; padding:10px 12px; margin-bottom:14px;">
-        繳款期限：<b style="color:#1d1d1f;" id="deadlineText"></b>（自動以操作當下時間 +7 天計算，藍色與紅色提醒區共用同一日期）
+        繳款期限：<b style="color:#1d1d1f;" id="deadlineText"></b>（自動以操作當下時間 +7 天計算，一個月催款／兩個月催款共用同一日期；常態催款不顯示此期限）
       </div>
 
       <div id="finalOnly" style="flex-direction:column; gap:14px; padding:14px; background:#fdf6f6; border:1px solid #f3dede; border-radius:10px; margin-bottom:14px;">
-        <div style="font-size:11px; font-weight:700; color:#d70015; letter-spacing:0.5px;">最終通知專用欄位</div>
+        <div style="font-size:11px; font-weight:700; color:#d70015; letter-spacing:0.5px;">兩個月催款專用欄位</div>
         <div class="field" style="margin-bottom:0;"><span class="lbl">最近一次聯繫日期</span><input id="lastContact" type="date"></div>
       </div>
 
-      <div class="hint" style="background:#f5f5f7; border-radius:8px; padding:10px 12px; margin-bottom:14px;">
-        處置生效日：<b style="color:#1d1d1f;" id="effectiveText"></b>（自動以充電結束時間 +67 天計算，兩個版本共用同一組數字）
+      <div id="effectiveHint" class="hint" style="background:#f5f5f7; border-radius:8px; padding:10px 12px; margin-bottom:14px;">
+        處置生效日：<b style="color:#1d1d1f;" id="effectiveText"></b>（自動以充電結束時間 +67 天計算，一個月催款／兩個月催款共用同一組數字；常態催款不含此段落）
       </div>
 
       <div class="field">
@@ -99,7 +104,7 @@ const WD = ['日','一','二','三','四','五','六'];
 const STORE = 'ampgo-dunning-generator-offline';
 
 let state = {
-  variant: 'first',
+  variant: 'routine',
   f: {
     orderNo: '',
     phone: '',
@@ -197,7 +202,9 @@ function parsePastedOrder(text) {
 
 function buildEmailInner() {
   const f = state.f;
-  const isFinal = state.variant === 'final';
+  const variant = state.variant;
+  const isFinal = variant === 'final';
+  const isRoutine = variant === 'routine';
   const deadlineText = fmtDate(addDaysFromNow(7), true) || '【繳款期限】';
   const effective = addDays(f.endAt, 67);
   const effectiveText = fmtDate(effective, false) || '【處置生效日】';
@@ -221,7 +228,10 @@ function buildEmailInner() {
   html += '<tr><td style="padding:14px 40px 0 40px;">';
   html += '<div style="font-family:-apple-system, \'Helvetica Neue\', Arial, sans-serif; font-size:24px; font-weight:700; line-height:1.4; color:#1d1d1f; text-align:center;">' + esc(title) + '</div></td></tr>';
 
-  if (!isFinal) {
+  if (isRoutine) {
+    html += '<tr><td style="padding:20px 40px 0 40px;">';
+    html += '<div style="font-family:-apple-system, \'Helvetica Neue\', Arial, sans-serif; font-size:15px; line-height:1.7; color:#454242;">您好，<br><br>您有一筆充電訂單目前因扣款失敗，尚未完成付款：</div></td></tr>';
+  } else if (!isFinal) {
     html += '<tr><td style="padding:20px 40px 0 40px;">';
     html += '<div style="font-family:-apple-system, \'Helvetica Neue\', Arial, sans-serif; font-size:15px; line-height:1.7; color:#454242;">您好，<br><br>我們先前已透過電話及 Email 多次與您聯繫，這筆充電費用目前仍因扣款失敗尚未完成付款：</div></td></tr>';
   } else {
@@ -242,7 +252,12 @@ function buildEmailInner() {
   html += '<tr><td style="padding:10px 0; font-family:-apple-system, \'Helvetica Neue\', Arial, sans-serif; font-size:14px; color:#86868b;" width="35%">應付金額</td><td style="padding:10px 0; font-family:-apple-system, \'Helvetica Neue\', Arial, sans-serif; font-size:18px; font-weight:700; color:#1d1d1f; text-align:right;">' + esc(amountText) + '</td></tr>';
   html += '</table></td></tr></table></td></tr>';
 
-  if (!isFinal) {
+  if (isRoutine) {
+    html += '<tr><td style="padding:28px 40px 0 40px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#eef4ff; border-radius:14px;"><tr><td style="padding:20px 24px;">';
+    html += '<div style="font-family:-apple-system, \'Helvetica Neue\', Arial, sans-serif; font-size:14px; line-height:1.7; color:#1d3f8f;">請至 App 的【會員】&gt;【充電漫遊．功能設定與訂單】&gt;【付款與發票】&gt;【付款方式】確認付款設定。<br><br>建議您更換其他信用卡、綁定其他付款方式，或洽詢發卡銀行確認卡片狀態，完成綁定後，系統將會自動重新執行扣款。</div></td></tr></table></td></tr>';
+
+    html += '<tr><td style="padding:28px 40px 0 40px;"><div style="font-family:-apple-system, \'Helvetica Neue\', Arial, sans-serif; font-size:14px; line-height:1.75; color:#6e6e73;">常見扣款失敗原因是銀行端拒絕授權、卡片餘額不足，或發票載具設定有誤。<br><br>確認調整後仍持續扣款失敗，歡迎透過 <a href="https://e.den-den.app/s/Line" style="color:#3C3CFF;">LINE 官方客服</a> 與我們聯繫，我們會進一步協助您確認。<br><br><i>若您已於近期完成繳款，這封通知請直接忽略。</i></div></td></tr>';
+  } else if (!isFinal) {
     html += '<tr><td style="padding:28px 40px 0 40px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#eef4ff; border-radius:14px;"><tr><td style="padding:20px 24px;">';
     html += '<div style="font-family:-apple-system, \'Helvetica Neue\', Arial, sans-serif; font-size:14px; line-height:1.7; color:#1d3f8f;">請於 <strong>' + esc(deadlineText) + '</strong> 前，至 App 的【會員】&gt;【充電漫遊．功能設定與訂單】&gt;【付款與發票】&gt;【付款方式】確認付款設定。<br><br>建議您更換其他信用卡、綁定其他付款方式，或洽詢發卡銀行確認卡片狀態，您完成綁定後，系統將會自動重新執行扣款。</div></td></tr></table></td></tr>';
 
@@ -270,8 +285,10 @@ function buildEmailInner() {
   return { html, title, deadlineText, effectiveText };
 }
 
-function subjectFor(isFinal) {
-  return isFinal ? '【AmpGO 重要通知】帳款逾期最終通知，請儘速完成繳款' : '【AmpGO 重要通知】您有一筆充電費用尚未完成扣款';
+function subjectFor(variant) {
+  if (variant === 'final') return '【AmpGO 重要通知】帳款逾期最終通知，請儘速完成繳款';
+  if (variant === 'routine') return '【AmpGO 重要通知】您有一筆充電費用尚未完成扣款';
+  return '【AmpGO 重要通知】您有一筆充電費用尚未完成扣款';
 }
 
 function syncInputs() {
@@ -288,14 +305,18 @@ function syncInputs() {
 }
 
 function render() {
-  const isFinal = state.variant === 'final';
-  document.getElementById('tabFirst').className = 'tabbtn' + (!isFinal ? ' active-first' : '');
+  const variant = state.variant;
+  const isFinal = variant === 'final';
+  const isRoutine = variant === 'routine';
+  document.getElementById('tabFirst').className = 'tabbtn' + (variant === 'first' ? ' active-first' : '');
+  document.getElementById('tabRoutine').className = 'tabbtn' + (isRoutine ? ' active-routine' : '');
   document.getElementById('tabFinal').className = 'tabbtn' + (isFinal ? ' active-final' : '');
   document.getElementById('finalOnly').className = isFinal ? 'show' : '';
+  document.getElementById('effectiveHint').className = 'hint' + (isRoutine ? '' : ' show');
 
   const built = buildEmailInner();
   document.getElementById('emailPreview').innerHTML = '<div style="max-width:600px; margin:0 auto;">' + built.html + '</div>';
-  document.getElementById('subjectText').textContent = subjectFor(isFinal);
+  document.getElementById('subjectText').textContent = subjectFor(variant);
   document.getElementById('deadlineText').textContent = built.deadlineText;
   document.getElementById('effectiveText').textContent = built.effectiveText;
 }
@@ -332,6 +353,7 @@ async function writeClipboard(html, plain, msg) {
 }
 
 document.getElementById('tabFirst').addEventListener('click', () => { state.variant = 'first'; persist(); render(); });
+document.getElementById('tabRoutine').addEventListener('click', () => { state.variant = 'routine'; persist(); render(); });
 document.getElementById('tabFinal').addEventListener('click', () => { state.variant = 'final'; persist(); render(); });
 
 ['orderNo','phone','station','startAt','endAt','kwh','amount','lastContact','logoUrl'].forEach(id => {
@@ -354,7 +376,7 @@ document.getElementById('btnParse').addEventListener('click', () => {
 });
 
 document.getElementById('btnCopySubject').addEventListener('click', () => {
-  writeClipboard('', subjectFor(state.variant === 'final'), '主旨已複製');
+  writeClipboard('', subjectFor(state.variant), '主旨已複製');
 });
 document.getElementById('btnCopyEmail').addEventListener('click', () => {
   const built = buildEmailInner();
