@@ -21,6 +21,9 @@
   .tabbtn.active-first { background:#ffffff; color:#1d1d1f; box-shadow:0 1px 3px rgba(0,0,0,0.12); }
   .tabbtn.active-routine { background:#ffffff; color:#0071e3; box-shadow:0 1px 3px rgba(0,0,0,0.12); }
   .tabbtn.active-final { background:#ffffff; color:#d70015; box-shadow:0 1px 3px rgba(0,0,0,0.12); }
+  .tabs2 { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:6px; }
+  .chbtn { border:1px solid #d2d2d7; border-radius:8px; padding:9px 6px; font-size:12px; font-weight:600; cursor:pointer; line-height:1.3; background:#ffffff; color:#6e6e73; }
+  .chbtn.active { background:#1d1d1f; border-color:#1d1d1f; color:#ffffff; }
   #finalOnly { display:none; }
   #finalOnly.show { display:flex; }
   #effectiveHint { display:none; }
@@ -36,6 +39,12 @@
     <div style="font-size:18px; font-weight:700; letter-spacing:-0.2px;">📧 待付款訂單催收信產生器</div>
     <div style="font-size:12px; line-height:1.6; color:#86868b; margin-top:6px;">填入下方欄位，右側即時預覽，完成後按「複製信件」貼到 Gmail。此檔案可離線使用（下載後直接雙擊開啟即可）。</div>
 
+    <div style="margin-top:20px; font-size:12px; font-weight:600; color:#6e6e73;">訂單來源</div>
+    <div class="tabs2">
+      <button type="button" id="chAmpgo" class="chbtn">AmpGO App</button>
+      <button type="button" id="chPxpay" class="chbtn">全支付</button>
+    </div>
+
     <div class="tabs3">
       <button type="button" id="tabRoutine" class="tabbtn">常態催款</button>
       <button type="button" id="tabFirst" class="tabbtn">一個月催款</button>
@@ -44,7 +53,7 @@
 
     <div style="margin-top:20px; display:flex; flex-direction:column; gap:8px; padding:14px; background:#f5f5f7; border-radius:10px;">
       <span style="font-size:12px; font-weight:700;">貼上後台訂單資訊，自動帶入欄位</span>
-      <textarea id="pasteText" rows="4" placeholder="貼上「訂單 ID：… / 站點：… / 手機：… / 充電時間：… / 充電度數：… / 總金額：…」整段文字" style="border:1px solid #d2d2d7; border-radius:8px; padding:8px 10px; font-size:12px; resize:vertical;"></textarea>
+      <textarea id="pasteText" rows="4" placeholder="AmpGO：貼上「訂單 ID：… / 站點：… / 手機：…」整段文字&#10;全支付：到 PXP 充電營運查詢的 Session 頁面，全選複製後貼上（會自動辨識）" style="border:1px solid #d2d2d7; border-radius:8px; padding:8px 10px; font-size:12px; resize:vertical;"></textarea>
       <button type="button" id="btnParse" style="border:none; background:#1d1d1f; color:#ffffff; border-radius:980px; padding:9px 14px; font-size:12px; font-weight:600; cursor:pointer;">解析並帶入欄位</button>
     </div>
 
@@ -105,6 +114,7 @@ const WD = ['日','一','二','三','四','五','六'];
 const STORE = 'ampgo-dunning-generator-offline';
 
 let state = {
+  channel: 'ampgo',
   variant: 'routine',
   f: {
     orderNo: '',
@@ -124,6 +134,7 @@ try {
   const raw = localStorage.getItem(STORE);
   if (raw) {
     const saved = JSON.parse(raw);
+    state.channel = saved.channel || state.channel;
     state.variant = saved.variant || state.variant;
     state.f = Object.assign({}, state.f, saved.f || {});
   }
@@ -201,6 +212,31 @@ function parsePastedOrder(text) {
   return out;
 }
 
+function isPxpayText(text) {
+  return /Session ID|Payment attempts|PXUser/.test(text);
+}
+
+function parsePxpayOrder(text) {
+  const pick = re => { const m = text.match(re); return m ? m[1].trim() : null; };
+  const toLocal = s => s.replace(' ', 'T').slice(0, 16);
+  const out = {};
+  const orderNo = pick(/\b(CHG[0-9A-Z]+)\b/) || pick(/(?<!Remote )Session ID\s*[：:]?\s*(\d+)\b/);
+  if (orderNo) out.orderNo = orderNo;
+  const station = pick(/站名\s*[：:]?\s*(.+?)(?:\t|\n|\s+營運商|$)/);
+  if (station) out.station = station;
+  const phone = pick(/手機\s*[：:]?\s*(\+?\d[\d\- ]{7,}\d)/);
+  if (phone) out.phone = phone.replace(/^\+886/, '0').replace(/\s/g, '');
+  const start = pick(/開始時間\s*[：:]?\s*(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2})/);
+  if (start) out.startAt = toLocal(start);
+  const end = pick(/結束時間\s*[：:]?\s*(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2})/);
+  if (end) out.endAt = toLocal(end);
+  const kwh = pick(/度數\s*[：:]?\s*([\d.]+)\s*kWh/i);
+  if (kwh) out.kwh = kwh;
+  const amount = pick(/金額\s*[：:]?\s*([\d,.]+)\s*元/) || pick(/費用\s*[：:]?\s*([\d,.]+)\s*元/);
+  if (amount) out.amount = String(Math.round(parseFloat(amount.replace(/,/g, ''))));
+  return out;
+}
+
 function buildEmailInner() {
   const f = state.f;
   const variant = state.variant;
@@ -213,7 +249,14 @@ function buildEmailInner() {
   const chargeTimeText = (fmtStamp(f.startAt) && fmtStamp(f.endAt)) ? (fmtStamp(f.startAt) + ' ~ ' + fmtStamp(f.endAt)) : '【充電時間】';
   const kwhText = f.kwh ? (f.kwh + ' kWh') : '【度數】 kWh';
   const amountText = f.amount ? ('新臺幣 ' + Number(String(f.amount).replace(/[^\d.]/g,'')).toLocaleString('en-US') + ' 元整') : '新臺幣【金額】元整';
-  const title = isFinal ? '帳款逾期最終通知，請儘速完成繳款' : '您有一筆充電費用尚未完成扣款';
+  const px = state.channel === 'pxpay';
+  const title = isFinal ? '帳款逾期最終通知，請儘速完成繳款' : (px ? '您有一筆全支付充電訂單尚未完成付款' : '您有一筆充電費用尚未完成扣款');
+  const pxSteps = '開啟<b>全支付 App</b>，點擊<b>【電動車充電】</b>，畫面會顯示這筆尚未完成付款的訂單，點擊付款即可完成扣款';
+  const pxNoAuto = '這筆訂單需要您在全支付 App 內完成付款，系統不會自動重新扣款。';
+  const contactLine = '歡迎在 <b style="color:#1d1d1f;">LINE 搜尋官方帳號 @ampgo</b> 與我們聯繫，我們會進一步協助您確認。<br><br><i>若您已於近期完成繳款，這封通知請直接忽略。</i>';
+  const reasonsText = px
+    ? '若您已點擊付款仍無法完成，可能是全支付綁定的信用卡或帳戶狀態異常，建議先在全支付 App 確認付款方式，或洽詢發卡銀行確認卡片狀態。<br><br>確認後仍無法完成付款，' + contactLine
+    : '常見扣款失敗原因是銀行端拒絕授權、卡片餘額不足，或發票載具設定有誤。<br><br>確認調整後仍持續扣款失敗，' + contactLine;
 
   let html = '';
   html += '<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px; max-width:600px; background-color:#ffffff; border-radius:18px; overflow:hidden;">';
@@ -229,16 +272,16 @@ function buildEmailInner() {
   html += '<tr><td style="padding:14px 40px 0 40px;">';
   html += '<div style="font-family:-apple-system, \'Helvetica Neue\', Arial, sans-serif; font-size:24px; font-weight:700; line-height:1.4; color:#1d1d1f; text-align:center;">' + esc(title) + '</div></td></tr>';
 
+  let introText;
   if (isRoutine) {
-    html += '<tr><td style="padding:20px 40px 0 40px;">';
-    html += '<div style="font-family:-apple-system, \'Helvetica Neue\', Arial, sans-serif; font-size:15px; line-height:1.7; color:#454242;">您好，<br><br>您有一筆充電訂單目前因扣款失敗，尚未完成付款：</div></td></tr>';
+    introText = px ? '您好，<br><br>您有一筆透過<b>全支付</b>付款的充電訂單，目前尚未完成付款：' : '您好，<br><br>您有一筆充電訂單目前因扣款失敗，尚未完成付款：';
   } else if (!isFinal) {
-    html += '<tr><td style="padding:20px 40px 0 40px;">';
-    html += '<div style="font-family:-apple-system, \'Helvetica Neue\', Arial, sans-serif; font-size:15px; line-height:1.7; color:#454242;">您好，<br><br>我們先前已透過電話及 Email 多次與您聯繫，這筆充電費用目前仍因扣款失敗尚未完成付款：</div></td></tr>';
+    introText = px ? '您好，<br><br>我們先前已透過電話及 Email 多次與您聯繫，您透過<b>全支付</b>付款的這筆充電費用，目前仍尚未完成付款：' : '您好，<br><br>我們先前已透過電話及 Email 多次與您聯繫，這筆充電費用目前仍因扣款失敗尚未完成付款：';
   } else {
-    html += '<tr><td style="padding:20px 40px 0 40px;">';
-    html += '<div style="font-family:-apple-system, \'Helvetica Neue\', Arial, sans-serif; font-size:15px; line-height:1.7; color:#454242;">AmpGO 用戶您好，<br><br>您的帳戶有一筆充電服務費用逾期未結清。過去兩個月內，我們已多次透過電話及 Email 與您聯繫，最近一次聯繫時間為 ' + esc(lastContactText) + '，尚未收到您的回覆。<br><br><b>這是我們發出的最後一次通知。</b></div></td></tr>';
+    introText = 'AmpGO 用戶您好，<br><br>' + (px ? '您透過全支付付款的一筆充電服務費用逾期未結清。' : '您的帳戶有一筆充電服務費用逾期未結清。') + '過去兩個月內，我們已多次透過電話及 Email 與您聯繫，最近一次聯繫時間為 ' + esc(lastContactText) + '，尚未收到您的回覆。<br><br><b>這是我們發出的最後一次通知。</b>';
   }
+  html += '<tr><td style="padding:20px 40px 0 40px;">';
+  html += '<div style="font-family:-apple-system, \'Helvetica Neue\', Arial, sans-serif; font-size:15px; line-height:1.7; color:#454242;">' + introText + '</div></td></tr>';
 
   html += '<tr><td style="padding:28px 40px 0 40px;">';
   html += '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f5f5f7; border-radius:14px;">';
@@ -255,21 +298,21 @@ function buildEmailInner() {
 
   if (isRoutine) {
     html += '<tr><td style="padding:28px 40px 0 40px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#eef4ff; border-radius:14px;"><tr><td style="padding:20px 24px;">';
-    html += '<div style="font-family:-apple-system, \'Helvetica Neue\', Arial, sans-serif; font-size:14px; line-height:1.7; color:#1d3f8f;">請至 App 的【會員】&gt;【充電漫遊．功能設定與訂單】&gt;【付款與發票】&gt;【付款方式】確認付款設定。<br><br>建議您更換其他信用卡、綁定其他付款方式，或洽詢發卡銀行確認卡片狀態，完成綁定後，系統將會自動重新執行扣款。</div></td></tr></table></td></tr>';
+    html += '<div style="font-family:-apple-system, \'Helvetica Neue\', Arial, sans-serif; font-size:14px; line-height:1.7; color:#1d3f8f;">' + (px ? '請' + pxSteps + '。<br><br>' + pxNoAuto : '請至 App 的【會員】&gt;【充電漫遊．功能設定與訂單】&gt;【付款與發票】&gt;【付款方式】確認付款設定。<br><br>建議您更換其他信用卡、綁定其他付款方式，或洽詢發卡銀行確認卡片狀態，完成綁定後，系統將會自動重新執行扣款。') + '</div></td></tr></table></td></tr>';
 
-    html += '<tr><td style="padding:28px 40px 0 40px;"><div style="font-family:-apple-system, \'Helvetica Neue\', Arial, sans-serif; font-size:14px; line-height:1.75; color:#6e6e73;">常見扣款失敗原因是銀行端拒絕授權、卡片餘額不足，或發票載具設定有誤。<br><br>確認調整後仍持續扣款失敗，歡迎在 <b style="color:#1d1d1f;">LINE 搜尋官方帳號 @ampgo</b> 與我們聯繫，我們會進一步協助您確認。<br><br><i>若您已於近期完成繳款，這封通知請直接忽略。</i></div></td></tr>';
+    html += '<tr><td style="padding:28px 40px 0 40px;"><div style="font-family:-apple-system, \'Helvetica Neue\', Arial, sans-serif; font-size:14px; line-height:1.75; color:#6e6e73;">' + reasonsText + '</div></td></tr>';
   } else if (!isFinal) {
     html += '<tr><td style="padding:28px 40px 0 40px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#eef4ff; border-radius:14px;"><tr><td style="padding:20px 24px;">';
-    html += '<div style="font-family:-apple-system, \'Helvetica Neue\', Arial, sans-serif; font-size:14px; line-height:1.7; color:#1d3f8f;">請於 <strong>' + esc(deadlineText) + '</strong> 前，至 App 的【會員】&gt;【充電漫遊．功能設定與訂單】&gt;【付款與發票】&gt;【付款方式】確認付款設定。<br><br>建議您更換其他信用卡、綁定其他付款方式，或洽詢發卡銀行確認卡片狀態，您完成綁定後，系統將會自動重新執行扣款。</div></td></tr></table></td></tr>';
+    html += '<div style="font-family:-apple-system, \'Helvetica Neue\', Arial, sans-serif; font-size:14px; line-height:1.7; color:#1d3f8f;">請於 <strong>' + esc(deadlineText) + '</strong> 前，' + (px ? pxSteps + '。<br><br>' + pxNoAuto : '至 App 的【會員】&gt;【充電漫遊．功能設定與訂單】&gt;【付款與發票】&gt;【付款方式】確認付款設定。<br><br>建議您更換其他信用卡、綁定其他付款方式，或洽詢發卡銀行確認卡片狀態，您完成綁定後，系統將會自動重新執行扣款。') + '</div></td></tr></table></td></tr>';
 
     html += '<tr><td style="padding:28px 40px 0 40px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#1d1d1f; border-radius:14px;"><tr><td style="padding:24px 24px;">';
     html += '<div style="font-family:-apple-system, \'Helvetica Neue\', Arial, sans-serif; font-size:13px; font-weight:700; letter-spacing:0.5px; color:#ff6961; text-transform:uppercase; margin-bottom:12px;">逾期未繳款之處置</div>';
     html += '<div style="font-family:-apple-system, \'Helvetica Neue\', Arial, sans-serif; font-size:14px; line-height:1.9; color:#f2f2f2;">若逾期超過 2 個月仍未完成繳款，我們將自 ' + esc(effectiveText) + ' 起：<br>一、終止您的充電服務使用權限；<br>二、將您的帳戶列入平台管制名單；<br>三、將本案轉交後續催收處理，並保留法律追訴之權利。</div></td></tr></table></td></tr>';
 
-    html += '<tr><td style="padding:32px 40px 0 40px;"><div style="font-family:-apple-system, \'Helvetica Neue\', Arial, sans-serif; font-size:14px; line-height:1.75; color:#6e6e73;">常見扣款失敗原因是銀行端拒絕授權、卡片餘額不足，或發票載具設定有誤。<br><br>確認調整後仍持續扣款失敗，歡迎在 <b style="color:#1d1d1f;">LINE 搜尋官方帳號 @ampgo</b> 與我們聯繫，我們會進一步協助您確認。<br><br><i>若您已於近期完成繳款，這封通知請直接忽略。</i></div></td></tr>';
+    html += '<tr><td style="padding:32px 40px 0 40px;"><div style="font-family:-apple-system, \'Helvetica Neue\', Arial, sans-serif; font-size:14px; line-height:1.75; color:#6e6e73;">' + reasonsText + '</div></td></tr>';
   } else {
     html += '<tr><td style="padding:28px 40px 0 40px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#fdecec; border-radius:14px; border:1px solid #f8c9c9;"><tr><td style="padding:20px 24px;">';
-    html += '<div style="font-family:-apple-system, \'Helvetica Neue\', Arial, sans-serif; font-size:14px; line-height:1.7; color:#8a1400;">請於 <strong>' + esc(deadlineText) + '</strong> 前，至 App 的【會員】&gt;【充電漫遊．功能設定與訂單】&gt;【付款與發票】&gt;【付款方式】完成信用卡重新綁定或更換其他付款方式，並完成補繳。</div></td></tr></table></td></tr>';
+    html += '<div style="font-family:-apple-system, \'Helvetica Neue\', Arial, sans-serif; font-size:14px; line-height:1.7; color:#8a1400;">請於 <strong>' + esc(deadlineText) + '</strong> 前，' + (px ? '開啟<b>全支付 App</b>，點擊<b>【電動車充電】</b>完成這筆訂單的付款；若付款失敗，請先確認全支付綁定的信用卡或帳戶狀態。' : '至 App 的【會員】&gt;【充電漫遊．功能設定與訂單】&gt;【付款與發票】&gt;【付款方式】完成信用卡重新綁定或更換其他付款方式，並完成補繳。') + '</div></td></tr></table></td></tr>';
 
     html += '<tr><td style="padding:28px 40px 0 40px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#1d1d1f; border-radius:14px;"><tr><td style="padding:24px 24px;">';
     html += '<div style="font-family:-apple-system, \'Helvetica Neue\', Arial, sans-serif; font-size:13px; font-weight:700; letter-spacing:0.5px; color:#ff6961; padding-bottom:12px;">逾期未繳款之處置</div>';
@@ -286,9 +329,9 @@ function buildEmailInner() {
   return { html, title, deadlineText, effectiveText };
 }
 
-function subjectFor(variant) {
-  if (variant === 'final') return '【AmpGO 重要通知】帳款逾期最終通知，請儘速完成繳款';
-  if (variant === 'routine') return '【AmpGO 重要通知】您有一筆充電費用尚未完成扣款';
+function subjectFor() {
+  if (state.variant === 'final') return '【AmpGO 重要通知】帳款逾期最終通知，請儘速完成繳款';
+  if (state.channel === 'pxpay') return '【AmpGO 重要通知】您有一筆全支付充電訂單尚未完成付款';
   return '【AmpGO 重要通知】您有一筆充電費用尚未完成扣款';
 }
 
@@ -309,6 +352,8 @@ function render() {
   const variant = state.variant;
   const isFinal = variant === 'final';
   const isRoutine = variant === 'routine';
+  document.getElementById('chAmpgo').className = 'chbtn' + (state.channel === 'ampgo' ? ' active' : '');
+  document.getElementById('chPxpay').className = 'chbtn' + (state.channel === 'pxpay' ? ' active' : '');
   document.getElementById('tabFirst').className = 'tabbtn' + (variant === 'first' ? ' active-first' : '');
   document.getElementById('tabRoutine').className = 'tabbtn' + (isRoutine ? ' active-routine' : '');
   document.getElementById('tabFinal').className = 'tabbtn' + (isFinal ? ' active-final' : '');
@@ -317,7 +362,7 @@ function render() {
 
   const built = buildEmailInner();
   document.getElementById('emailPreview').innerHTML = '<div style="max-width:600px; margin:0 auto;">' + built.html + '</div>';
-  document.getElementById('subjectText').textContent = subjectFor(variant);
+  document.getElementById('subjectText').textContent = subjectFor();
   document.getElementById('deadlineText').textContent = built.deadlineText;
   document.getElementById('effectiveText').textContent = built.effectiveText;
 }
@@ -353,6 +398,8 @@ async function writeClipboard(html, plain, msg) {
   }
 }
 
+document.getElementById('chAmpgo').addEventListener('click', () => { state.channel = 'ampgo'; persist(); render(); });
+document.getElementById('chPxpay').addEventListener('click', () => { state.channel = 'pxpay'; persist(); render(); });
 document.getElementById('tabFirst').addEventListener('click', () => { state.variant = 'first'; persist(); render(); });
 document.getElementById('tabRoutine').addEventListener('click', () => { state.variant = 'routine'; persist(); render(); });
 document.getElementById('tabFinal').addEventListener('click', () => { state.variant = 'final'; persist(); render(); });
@@ -367,17 +414,19 @@ document.getElementById('tabFinal').addEventListener('click', () => { state.vari
 
 document.getElementById('btnParse').addEventListener('click', () => {
   const text = document.getElementById('pasteText').value;
-  const patch = parsePastedOrder(text);
+  const px = isPxpayText(text);
+  const patch = px ? parsePxpayOrder(text) : parsePastedOrder(text);
   if (Object.keys(patch).length === 0) { flash('沒有偵測到可用欄位，請確認格式'); return; }
+  state.channel = px ? 'pxpay' : 'ampgo';
   state.f = Object.assign({}, state.f, patch);
   persist();
   syncInputs();
   render();
-  flash('已帶入 ' + Object.keys(patch).length + ' 個欄位');
+  flash((px ? '已辨識為全支付訂單，' : '已辨識為 AmpGO 訂單，') + '帶入 ' + Object.keys(patch).length + ' 個欄位');
 });
 
 document.getElementById('btnCopySubject').addEventListener('click', () => {
-  writeClipboard('', subjectFor(state.variant), '主旨已複製');
+  writeClipboard('', subjectFor(), '主旨已複製');
 });
 document.getElementById('btnCopyEmail').addEventListener('click', () => {
   const built = buildEmailInner();
