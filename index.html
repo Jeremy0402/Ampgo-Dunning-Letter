@@ -213,7 +213,8 @@ function parsePastedOrder(text) {
 }
 
 function isPxpayText(text) {
-  return /Session ID|Payment attempts|PXUser/.test(text);
+  if (/訂單\s*ID\s*[：:]/.test(text)) return false;
+  return /Remote Session ID|Payment attempts|PXUser/.test(text);
 }
 
 function parsePxpayOrder(text) {
