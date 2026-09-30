@@ -75,7 +75,7 @@
 
       <div id="finalOnly" style="flex-direction:column; gap:14px; padding:14px; background:#fdf6f6; border:1px solid #f3dede; border-radius:10px; margin-bottom:14px;">
         <div style="font-size:11px; font-weight:700; color:#d70015; letter-spacing:0.5px;">兩個月催款專用欄位</div>
-        <div class="field" style="margin-bottom:0;"><span class="lbl">最近一次聯繫日期</span><input id="lastContact" type="date"></div>
+        <div class="field" style="margin-bottom:0;"><span class="lbl">第一次寄信日期</span><input id="lastContact" type="date"></div>
       </div>
 
       <div id="effectiveHint" class="hint" style="background:#f5f5f7; border-radius:8px; padding:10px 12px; margin-bottom:14px;">
@@ -246,7 +246,7 @@ function buildEmailInner() {
   const deadlineText = fmtDate(addDaysFromNow(7), true) || '【繳款期限】';
   const effective = addDays(f.endAt, 67);
   const effectiveText = fmtDate(effective, false) || '【處置生效日】';
-  const lastContactText = fmtDate(f.lastContact, false) || '【最近聯繫日期】';
+  const lastContactText = fmtDate(f.lastContact, false) || '【第一次寄信日期】';
   const chargeTimeText = (fmtStamp(f.startAt) && fmtStamp(f.endAt)) ? (fmtStamp(f.startAt) + ' ~ ' + fmtStamp(f.endAt)) : '【充電時間】';
   const kwhText = f.kwh ? (f.kwh + ' kWh') : '【度數】 kWh';
   const amountText = f.amount ? ('新臺幣 ' + Number(String(f.amount).replace(/[^\d.]/g,'')).toLocaleString('en-US') + ' 元整') : '新臺幣【金額】元整';
@@ -279,7 +279,7 @@ function buildEmailInner() {
   } else if (!isFinal) {
     introText = px ? '您好，<br><br>我們先前已透過電話及 Email 多次與您聯繫，您透過<b>全支付</b>付款的這筆充電費用，目前仍尚未完成付款：' : '您好，<br><br>我們先前已透過電話及 Email 多次與您聯繫，這筆充電費用目前仍因扣款失敗尚未完成付款：';
   } else {
-    introText = 'AmpGO 用戶您好，<br><br>' + (px ? '您透過全支付付款的一筆充電服務費用逾期未結清。' : '您的帳戶有一筆充電服務費用逾期未結清。') + '過去兩個月內，我們已多次透過電話及 Email 與您聯繫，最近一次聯繫時間為 ' + esc(lastContactText) + '，尚未收到您的回覆。<br><br><b>這是我們發出的最後一次通知。</b>';
+    introText = 'AmpGO 用戶您好，<br><br>' + (px ? '您透過全支付付款的一筆充電服務費用逾期未結清。' : '您的帳戶有一筆充電服務費用逾期未結清。') + '過去兩個月內，我們已多次透過電話及 Email 與您聯繫，並於 ' + esc(lastContactText) + ' 寄出第一次通知信，尚未收到您的回覆。<br><br><b>這是我們發出的最後一次通知。</b>';
   }
   html += '<tr><td style="padding:20px 40px 0 40px;">';
   html += '<div style="font-family:-apple-system, \'Helvetica Neue\', Arial, sans-serif; font-size:15px; line-height:1.7; color:#454242;">' + introText + '</div></td></tr>';
