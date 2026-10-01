@@ -37,7 +37,7 @@
   <div style="background:#ffffff; border-right:1px solid #e0e0e3; padding:28px 24px 48px 24px; position:sticky; top:0; max-height:100vh; overflow-y:auto;">
 
     <div style="font-size:18px; font-weight:700; letter-spacing:-0.2px;">📧 待付款訂單催收信產生器</div>
-    <div style="font-size:12px; line-height:1.6; color:#86868b; margin-top:6px;">填入下方欄位，右側即時預覽，完成後按「複製信件」貼到 Gmail。此檔案可離線使用（下載後直接雙擊開啟即可）。</div>
+    <div style="font-size:12px; line-height:1.6; color:#86868b; margin-top:6px;">填入下方欄位，右側即時預覽，完成後按「複製信件」貼到 Gmail。填寫的資料只存在這台電腦的瀏覽器，不會上傳。</div>
 
     <div style="margin-top:20px; font-size:12px; font-weight:600; color:#6e6e73;">訂單來源</div>
     <div class="tabs2">
@@ -69,6 +69,12 @@
         <div class="field" style="margin-bottom:0;"><span class="lbl">充電度數 (kWh)</span><input id="kwh" type="text" placeholder="3.2"></div>
         <div class="field" style="margin-bottom:0;"><span class="lbl">應付金額 (元)</span><input id="amount" type="text" placeholder="46"></div>
       </div>
+      <div class="field">
+        <span class="lbl">扣款失敗原因</span>
+        <input id="reason" type="text" list="reasonList" placeholder="額度不足">
+        <datalist id="reasonList"><option value="額度不足"><option value="載具格式錯誤"><option value="銀行端拒絕授權"></datalist>
+        <span class="hint">會顯示在信件灰色明細區。全支付後台看不到失敗原因，留空就不會顯示這一列。</span>
+      </div>
       <div class="hint" style="background:#f5f5f7; border-radius:8px; padding:10px 12px; margin-bottom:14px;">
         繳款期限：<b style="color:#1d1d1f;" id="deadlineText"></b>（自動以操作當下時間 +7 天計算，一個月催款／兩個月催款共用同一日期；常態催款不顯示此期限）
       </div>
@@ -85,7 +91,7 @@
       <div class="field">
         <span class="lbl">Logo 圖片網址</span>
         <input id="logoUrl" type="text">
-        <span class="hint">寄信前請換成公開的完整網址（https://…），否則 Gmail 收件人看不到 Logo。</span>
+        <span class="hint">已預設為公開網址，一般不用修改。若要更換，請填完整的 https:// 網址，否則收件人看不到 Logo。</span>
       </div>
     </div>
 
@@ -124,6 +130,7 @@ let state = {
     endAt: '',
     kwh: '',
     amount: '',
+    reason: '',
     deadline: '',
     lastContact: '',
     logoUrl: 'https://cdn.jsdelivr.net/gh/Jeremy0402/Ampgo-Dunning-Letter@main/assets/logo.png'
@@ -257,7 +264,7 @@ function buildEmailInner() {
   const contactLine = '歡迎在 <b style="color:#1d1d1f;">LINE 搜尋官方帳號 @ampgo</b> 與我們聯繫，我們會進一步協助您確認。<br><br><i>若您已於近期完成繳款，這封通知請直接忽略。</i>';
   const reasonsText = px
     ? '若您已點擊付款仍無法完成，可能是全支付綁定的信用卡或帳戶狀態異常，建議先在全支付 App 確認付款方式，或洽詢發卡銀行確認卡片狀態。<br><br>確認後仍無法完成付款，' + contactLine
-    : '常見扣款失敗原因是銀行端拒絕授權、卡片餘額不足，或發票載具設定有誤。<br><br>確認調整後仍持續扣款失敗，' + contactLine;
+    : '請依上方的扣款失敗原因調整後重新付款。<br><br>若調整後仍持續扣款失敗，' + contactLine;
 
   let html = '';
   html += '<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px; max-width:600px; background-color:#ffffff; border-radius:18px; overflow:hidden;">';
@@ -294,6 +301,7 @@ function buildEmailInner() {
   html += row('充電站點', f.station);
   html += row('充電時間', chargeTimeText);
   html += row('充電度數', kwhText);
+  if (f.reason || !px) html += row('扣款失敗原因', f.reason || '【扣款失敗原因】');
   html += '<tr><td style="padding:10px 0; font-family:-apple-system, \'Helvetica Neue\', Arial, sans-serif; font-size:14px; color:#86868b;" width="35%">應付金額</td><td style="padding:10px 0; font-family:-apple-system, \'Helvetica Neue\', Arial, sans-serif; font-size:18px; font-weight:700; color:#1d1d1f; text-align:right;">' + esc(amountText) + '</td></tr>';
   html += '</table><div style="padding-top:14px; font-family:-apple-system, \'Helvetica Neue\', Arial, sans-serif; font-size:12px; line-height:1.6; color:#86868b;">實際付款金額，將以付款當下帳號內的有效折扣券折抵後為準。</div></td></tr></table></td></tr>';
 
@@ -345,6 +353,7 @@ function syncInputs() {
   document.getElementById('endAt').value = f.endAt;
   document.getElementById('kwh').value = f.kwh;
   document.getElementById('amount').value = f.amount;
+  document.getElementById('reason').value = f.reason;
   document.getElementById('lastContact').value = f.lastContact;
   document.getElementById('logoUrl').value = f.logoUrl;
 }
@@ -405,7 +414,7 @@ document.getElementById('tabFirst').addEventListener('click', () => { state.vari
 document.getElementById('tabRoutine').addEventListener('click', () => { state.variant = 'routine'; persist(); render(); });
 document.getElementById('tabFinal').addEventListener('click', () => { state.variant = 'final'; persist(); render(); });
 
-['orderNo','phone','station','startAt','endAt','kwh','amount','lastContact','logoUrl'].forEach(id => {
+['orderNo','phone','station','startAt','endAt','kwh','amount','reason','lastContact','logoUrl'].forEach(id => {
   document.getElementById(id).addEventListener('input', e => {
     state.f[id] = e.target.value;
     persist();
@@ -419,7 +428,7 @@ document.getElementById('btnParse').addEventListener('click', () => {
   const patch = px ? parsePxpayOrder(text) : parsePastedOrder(text);
   if (Object.keys(patch).length === 0) { flash('沒有偵測到可用欄位，請確認格式'); return; }
   state.channel = px ? 'pxpay' : 'ampgo';
-  state.f = Object.assign({}, state.f, patch);
+  state.f = Object.assign({}, state.f, { reason: '' }, patch);
   persist();
   syncInputs();
   render();
