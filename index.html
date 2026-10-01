@@ -182,8 +182,10 @@ function esc(s) {
 
 function dedupeStation(s) {
   const parts = s.split(' - ');
-  if (parts.length === 2 && parts[1].includes(parts[0])) return parts[1].trim();
-  return s;
+  if (parts.length < 2) return s;
+  const operator = parts[0].trim();
+  const rest = parts.slice(1).join(' - ').trim();
+  return operator && rest.includes(operator) ? rest : s;
 }
 
 function parsePastedOrder(text) {
@@ -231,7 +233,7 @@ function parsePxpayOrder(text) {
   const orderNo = pick(/\b(CHG[0-9A-Z]+)\b/) || pick(/(?<!Remote )Session ID\s*[：:]?\s*(\d+)\b/);
   if (orderNo) out.orderNo = orderNo;
   const station = pick(/站名\s*[：:]?\s*(.+?)(?:\t|\n|\s+營運商|$)/);
-  if (station) out.station = station;
+  if (station) out.station = dedupeStation(station);
   const phone = pick(/手機\s*[：:]?\s*(\+?\d[\d\- ]{7,}\d)/);
   if (phone) out.phone = phone.replace(/^\+886/, '0').replace(/\s/g, '');
   const start = pick(/開始時間\s*[：:]?\s*(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2})/);
