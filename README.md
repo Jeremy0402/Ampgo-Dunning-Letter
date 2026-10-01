@@ -1,4 +1,4 @@
-# AmpGO 催款信產生器
+# AmpGO 催繳信產生器
 
 線上開啟：https://jeremy0402.github.io/Ampgo-Dunning-Letter/
 
