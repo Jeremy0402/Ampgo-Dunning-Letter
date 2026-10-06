@@ -50,6 +50,7 @@
       <button type="button" id="tabFirst" class="tabbtn">一個月催繳</button>
       <button type="button" id="tabFinal" class="tabbtn">兩個月催繳</button>
     </div>
+    <div class="hint" style="margin-top:8px;">寄送排程：充電結束後每 7 天寄一封。第 5 封用「一個月催繳」，第 10 封用「兩個月催繳」，其餘用「常態催繳」。</div>
 
     <div style="margin-top:20px; display:flex; flex-direction:column; gap:8px; padding:14px; background:#f5f5f7; border-radius:10px;">
       <span style="font-size:12px; font-weight:700;">貼上後台訂單資訊，自動帶入欄位</span>
@@ -76,16 +77,16 @@
         <span class="hint">會顯示在信件灰色明細區。全支付後台看不到失敗原因，留空就不會顯示這一列。</span>
       </div>
       <div class="hint" style="background:#f5f5f7; border-radius:8px; padding:10px 12px; margin-bottom:14px;">
-        付款期限：<b style="color:#1d1d1f;" id="deadlineText"></b>（自動以操作當下時間 +7 天計算，一個月催繳／兩個月催繳共用同一日期；常態催繳不顯示此期限）
+        付款期限：<b style="color:#1d1d1f;" id="deadlineText"></b>（寄信當天 +7 天，也就是下一封信的寄送日；常態催繳不顯示）
       </div>
 
       <div id="finalOnly" style="flex-direction:column; gap:14px; padding:14px; background:#fdf6f6; border:1px solid #f3dede; border-radius:10px; margin-bottom:14px;">
         <div style="font-size:11px; font-weight:700; color:#d70015; letter-spacing:0.5px;">兩個月催繳專用欄位</div>
-        <div class="field" style="margin-bottom:0;"><span class="lbl">第一次寄信日期</span><input id="lastContact" type="date"></div>
+        <div class="field" style="margin-bottom:0;"><span class="lbl">上一次寄信日期（第 9 封）</span><input id="lastContact" type="date"></div>
       </div>
 
       <div id="effectiveHint" class="hint" style="background:#f5f5f7; border-radius:8px; padding:10px 12px; margin-bottom:14px;">
-        處置生效日：<b style="color:#1d1d1f;" id="effectiveText"></b>（自動以充電結束時間 +67 天計算，一個月催繳／兩個月催繳共用同一組數字；常態催繳不含此段落）
+        處置生效日：<b style="color:#1d1d1f;" id="effectiveText"></b>（充電結束時間 +77 天，等於第 10 封信的付款期限；只用在一個月催繳）
       </div>
 
       <div class="field">
@@ -253,9 +254,9 @@ function buildEmailInner() {
   const isFinal = variant === 'final';
   const isRoutine = variant === 'routine';
   const deadlineText = fmtDate(addDaysFromNow(7), true) || '【付款期限】';
-  const effective = addDays(f.endAt, 67);
+  const effective = addDays(f.endAt, 77);
   const effectiveText = fmtDate(effective, false) || '【處置生效日】';
-  const lastContactText = fmtDate(f.lastContact, false) || '【第一次寄信日期】';
+  const lastContactText = fmtDate(f.lastContact, false) || '【上一次寄信日期】';
   const chargeTimeText = (fmtStamp(f.startAt) && fmtStamp(f.endAt)) ? (fmtStamp(f.startAt) + ' ~ ' + fmtStamp(f.endAt)) : '【充電時間】';
   const kwhText = f.kwh ? (f.kwh + ' kWh') : '【度數】 kWh';
   const amountText = f.amount ? ('新臺幣 ' + Number(String(f.amount).replace(/[^\d.]/g,'')).toLocaleString('en-US') + ' 元整') : '新臺幣【金額】元整';
@@ -288,7 +289,7 @@ function buildEmailInner() {
   } else if (!isFinal) {
     introText = px ? '您好，<br><br>我們先前已透過電話及 Email 多次與您聯繫，您透過<b>全支付</b>付款的這筆充電費用，目前仍尚未完成付款：' : '您好，<br><br>我們先前已透過電話及 Email 多次與您聯繫，這筆充電費用目前仍因扣款失敗尚未完成付款：';
   } else {
-    introText = '您好，<br><br>' + (px ? '您透過全支付付款的一筆充電服務費用已逾期，尚未完成付款。' : '您的帳戶有一筆充電服務費用已逾期，尚未完成付款。') + '過去兩個月內，我們已多次透過電話及 Email 與您聯繫，並於 ' + esc(lastContactText) + ' 寄出第一次通知信，尚未收到您的回覆。<br><br><b>這是我們發出的最後一次通知。</b>';
+    introText = '您好，<br><br>' + (px ? '您透過全支付付款的一筆充電服務費用已逾期，尚未完成付款。' : '您的帳戶有一筆充電服務費用已逾期，尚未完成付款。') + '過去兩個月內，我們已多次透過電話及 Email 與您聯繫，最近一次通知信已於 ' + esc(lastContactText) + ' 寄出，尚未收到您的回覆。<br><br><b>這是我們發出的最後一次通知。</b>';
   }
   html += '<tr><td style="padding:20px 40px 0 40px;">';
   html += '<div style="font-family:-apple-system, \'Helvetica Neue\', Arial, sans-serif; font-size:15px; line-height:1.7; color:#454242;">' + introText + '</div></td></tr>';
@@ -327,7 +328,7 @@ function buildEmailInner() {
 
     html += '<tr><td style="padding:28px 40px 0 40px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#1d1d1f; border-radius:14px;"><tr><td style="padding:24px 24px;">';
     html += '<div style="font-family:-apple-system, \'Helvetica Neue\', Arial, sans-serif; font-size:13px; font-weight:700; letter-spacing:0.5px; color:#ff6961; padding-bottom:12px;">逾期未付款之處置</div>';
-    html += '<div style="font-family:-apple-system, \'Helvetica Neue\', Arial, sans-serif; font-size:14px; line-height:1.9; color:#f2f2f2;">逾期仍未完成付款，我們將自 ' + esc(effectiveText) + ' 起：<br>一、終止您的充電服務使用權限。<br>二、將您的帳戶列入平台管制名單。<br>三、將本案轉交後續催收處理，並保留法律追訴之權利。</div></td></tr></table></td></tr>';
+    html += '<div style="font-family:-apple-system, \'Helvetica Neue\', Arial, sans-serif; font-size:14px; line-height:1.9; color:#f2f2f2;">逾期仍未完成付款，我們將自 ' + esc(deadlineText) + ' 起：<br>一、終止您的充電服務使用權限。<br>二、將您的帳戶列入平台管制名單。<br>三、將本案轉交後續催收處理，並保留法律追訴之權利。</div></td></tr></table></td></tr>';
 
     html += '<tr><td style="padding:28px 40px 0 40px;"><div style="font-family:-apple-system, \'Helvetica Neue\', Arial, sans-serif; font-size:14px; line-height:1.75; color:#6e6e73;">如對本通知內容有疑義，請於期限前在 <b style="color:#1d1d1f;">LINE 搜尋官方帳號 @ampgo</b> 與我們聯繫。</div></td></tr>';
   }
@@ -370,7 +371,7 @@ function render() {
   document.getElementById('tabRoutine').className = 'tabbtn' + (isRoutine ? ' active-routine' : '');
   document.getElementById('tabFinal').className = 'tabbtn' + (isFinal ? ' active-final' : '');
   document.getElementById('finalOnly').className = isFinal ? 'show' : '';
-  document.getElementById('effectiveHint').className = 'hint' + (isRoutine ? '' : ' show');
+  document.getElementById('effectiveHint').className = 'hint' + (variant === 'first' ? ' show' : '');
 
   const built = buildEmailInner();
   document.getElementById('emailPreview').innerHTML = '<div style="max-width:600px; margin:0 auto;">' + built.html + '</div>';
